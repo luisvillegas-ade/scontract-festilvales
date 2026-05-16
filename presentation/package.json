@@ -1,0 +1,7 @@
+{
+  "name": "presentation-site",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}

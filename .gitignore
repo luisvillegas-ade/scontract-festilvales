@@ -1,0 +1,58 @@
+# Node modules
+node_modules/
+
+# Compilation output
+dist/
+
+# pnpm deploy output
+bundle/
+
+# Hardhat Build Artifacts
+artifacts/
+
+# Hardhat compilation (v2) support directory
+cache/
+
+# Typechain output
+types/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Hardhat coverage reports
+coverage/
+
+# Gas snapshot files
+.gas-snapshot/
+
+# Snapshot cheatcodes output
+snapshots/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Submodules or nested repos causing issues
+docs-avalanche/
+
+# User requested ignores
+hackaton/
+.agents/
+
+# Debug and temporary logs
+
+
+*.txt
+!README.md
+!ORQUESTADOR.md
+!PITCH_DECK.md
+!architecture_design.md
+!architecture_design_b2b.md
+!chat.md
+

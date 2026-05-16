@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AvalanchePay Presentation</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-icon">🎵</div>
+          <div>
+            <div class="brand-title">AvalanchePay</div>
+            <div class="brand-sub">Presentación de proyecto</div>
+          </div>
+        </div>
+
+        <nav class="menu">
+          <button class="menu-item active" data-panel="overview">Resumen</button>
+          <button class="menu-item" data-panel="flow">Flujo</button>
+          <button class="menu-item" data-panel="demo">Demo</button>
+          <button class="menu-item" data-panel="pitch">Pitch</button>
+          <button class="menu-item" data-panel="deliverables">Entrega</button>
+        </nav>
+
+        <div class="footer-note">Carpeta independiente: <strong>/presentation</strong></div>
+      </aside>
+
+      <main class="panel">
+        <header class="panel-header">
+          <div>
+            <h1 id="panel-title">Resumen</h1>
+            <p class="panel-sub">Pantalla de apoyo para tu pitch: explica el problema, el flujo y el valor del proyecto con claridad.</p>
+          </div>
+        </header>
+
+        <section class="content active" id="overview">
+          <div class="card">
+            <h2>Qué hace AvalanchePay</h2>
+            <p>Convierta el pago de un show en un flujo seguro de escrow y split automático entre artista, productora y estado.</p>
+            <ul>
+              <li>Depósito on-chain antes del evento.</li>
+              <li>Pago garantizado al artista solo cuando el show finaliza.</li>
+              <li>Retención fiscal automática para el gobierno.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <h2>Por qué es potente</h2>
+            <ul>
+              <li>Reduce litigios y retrasos en pagos.</li>
+              <li>Da visibilidad fiscal y transparencia.</li>
+              <li>Es un MVP claro para hackathon.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="content" id="flow">
+          <div class="card">
+            <h2>Flujo del proyecto</h2>
+            <div class="step-list">
+              <div class="step">1. Productora crea el contrato y deposita el pago.</div>
+              <div class="step">2. El escrow on-chain conserva el fondo.</div>
+              <div class="step">3. El evento se realiza con metadata verificable.</div>
+              <div class="step">4. El contrato libera el split automático.</div>
+              <div class="step">5. Artista cobra y el estado recibe su retención.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Roles clave</h2>
+            <div class="grid-3">
+              <div class="role-card"><strong>Productora</strong><p>Asegura los fondos antes de la función.</p></div>
+              <div class="role-card"><strong>Artista</strong><p>Obtiene pago transparente y garantizado.</p></div>
+              <div class="role-card"><strong>Estado</strong><p>Controla retención y trazabilidad fiscal.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="content" id="demo">
+          <div class="card">
+            <h2>Demo de split</h2>
+            <label for="demo-amount">Monto bruto (AVAX)</label>
+            <input id="demo-amount" type="number" min="0" value="1200" />
+            <div class="split-preview">
+              <div><span>Artista 97%</span><strong id="artist-value">1164.00 AVAX</strong></div>
+              <div><span>Estado 2%</span><strong id="state-value">24.00 AVAX</strong></div>
+              <div><span>Productora 1%</span><strong id="producer-value">12.00 AVAX</strong></div>
+            </div>
+            <p class="tip">Muestra este ejemplo en el demo: con 1200 AVAX, el artista recibe 1164 AVAX y el Estado obtiene 24 AVAX.</p>
+          </div>
+
+          <div class="card">
+            <h2>Qué decir</h2>
+            <ul>
+              <li>El contrato actúa como garante y evita pagos en diferido.</li>
+              <li>El split es automático y auditable en blockchain.</li>
+              <li>Es ideal para festivales y eventos grandes.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="content" id="pitch">
+          <div class="card">
+            <h2>Pitch para el jurado</h2>
+            <ol>
+              <li><strong>Problema:</strong> artistas cobran tarde o no cobran.</li>
+              <li><strong>Solución:</strong> escrow on-chain con split automático.</li>
+              <li><strong>Impacto:</strong> menos riesgo para artistas, control para productoras y transparencia para el estado.</li>
+            </ol>
+          </div>
+
+          <div class="card highlight">
+            <h2>Mensaje clave</h2>
+            <p>Este proyecto es la primera capa de confianza para el ecosistema festivalero, donde todos los actores ganan con un mismo proceso.</p>
+          </div>
+        </section>
+
+        <section class="content" id="deliverables">
+          <div class="card">
+            <h2>Qué está listo aquí</h2>
+            <ul>
+              <li>Micro-site independiente de presentación.</li>
+              <li>Demo interactiva de cálculo de split.</li>
+              <li>Resumen claro para jurado.</li>
+              <li>No toca el frontend principal ni el código de producción.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <h2>Cómo usarlo</h2>
+            <p>Abrí <code>presentation/index.html</code> en tu navegador o servilo con cualquier servidor estático.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
