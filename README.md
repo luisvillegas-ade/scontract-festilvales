@@ -1,80 +1,82 @@
-# SContract Artistas Salta
+# SContract Artistas Salta 🚀
+### Ecosistema de Liquidación Automatizada para Festivales de Música
 
-## Objetivo del proyecto
+SContract es una solución B2B basada en la red **Avalanche** diseñada para profesionalizar la industria de festivales en Salta, Argentina. Permite a productoras, artistas y entes gubernamentales trabajar con acuerdos comerciales inmutables, pagos garantizados mediante Escrow y splits fiscales automáticos.
 
-Crear un ecosistema de flujo de dinero para festivales de música y eventos, basado en Avalanche, que permita a productoras, artistas y ticketeras trabajar con acuerdos comerciales inmutables, pagos garantizados y splits automáticos.
+---
 
-El proyecto propone una solución B2B / SaaS para:
-- Productoras de eventos que necesitan garantizar pagos a artistas.
-- Artistas que exigen seguridad y transparencia en liquidaciones.
-- Ticketing y servicios asociados que participan como terceros en el cobro.
+## 🌟 Propuesta de Valor
 
-## Qué ya hay en el repo
+- **Para Artistas**: Seguridad de cobro garantizada. El dinero se bloquea en la blockchain antes del show.
+- **Para Productoras**: Eficiencia operativa. Automatización de pagos y cumplimiento fiscal en una sola transacción.
+- **Para el Estado (DGR Salta)**: Recaudación en tiempo real. Retención automática del 4.8% (Sellos + Actividades Económicas) eliminando la evasión.
 
-- `contracts/EscrowSplit.sol`: contrato de escrow con depósito, split automático y cancelación.
-- `test/EscrowSplit.ts`: pruebas unitarias para validar ownership, depósitos y liberaciones.
-- `hardhat.config.ts`: configuración para Avalanche Fuji.
-- `package.json`: dependencias de Hardhat, Ethers y OpenZeppelin.
+---
 
-## Qué mejorar para ganar la hackathon
+## 🛠️ Stack Tecnológico
 
-### 1. Convertirlo en un flujo real de festival
-- `depositarEscrow(...)`: bloquea fondos en el contrato con datos de artista y hash IPFS.
-- `liberarPagoEscrow(...)`: libera los fondos cuando el show se completa.
-- `cancelarEscrow(...)`: permite devolver el depósito si el evento se cancela.
+- **Blockchain**: Avalanche (Fuji Testnet)
+- **Smart Contracts**: Solidity ^0.8.20 (OpenZeppelin)
+- **Backend/DB**: Supabase (PostgreSQL + Auth)
+- **Frontend**: React + Vite + TypeScript
+- **Web3**: Ethers.js v6 + Metamask
 
-### 2. Soporte multi-stakeholder
-- Split no solo artista/productora, sino también ticketera, venue o sponsor.
-- Metadata en IPFS que describe el evento, la cláusula de fuerza mayor y el reparto.
+---
 
-### 3. Usar stablecoin para reducir riesgo de volatilidad
-- Usar USDC.e en Avalanche para que el flujo de dinero de festivales no dependa del precio de AVAX.
-- Esto es clave para adoptar productoras tradicionales.
+## 📂 Estructura del Proyecto
 
-### 4. Enfócate en la experiencia B2B
-- Dashboard de eventos y contratos.
-- Estados de contrato: `CREATED`, `FUNDED`, `RELEASED`, `CANCELLED`, `DISPUTED`.
-- Sincronización en base de datos con eventos on-chain.
-
-### 5. Hazla atractiva para jurados
-- Problema real: artistas cobran tarde o no cobran, productoras tienen riesgo y ticketeras no tienen visibilidad.
-- Solución: garantía de pago + transparencia + automatización de splits.
-
-## Uso rápido
-
-Instala dependencias y ejecuta tests:
-
-```bash
-npm install
-npm test
+```text
+├── contracts/          # Smart Contracts en Solidity
+├── frontend/           # Aplicación React (Vite)
+├── docs/               # Documentación detallada del sistema
+├── scripts/            # Scripts de despliegue y automatización
+└── test/               # Pruebas unitarias de Smart Contracts
 ```
 
-## Ideas de futuro inmediato
+---
 
-1. Integrar la venta de tickets como fuente de financiación del escrow.
-2. Añadir oráculo o multi-sig para validar el fin del evento.
-3. Exponer un dashboard que muestre el estado del contrato y el hash IPFS del acuerdo.
-4. Incorporar onboarding de productoras y verificación de artistas.
+## 📖 Documentación Detallada
 
-## Resultado ahora
+Hemos preparado guías completas para entender y operar el sistema:
 
-Con estas mejoras, el proyecto ya tiene:
-- Un contrato on-chain que gestiona depósitos y liberaciones.
-- Split automático con fee de servicio.
-- Seguridad contra doble pago.
-- Una base sólida para convertirlo en un MVP de festival.
+1.  **[Arquitectura del Sistema](docs/ARCHITECTURE.md)**: Flujo de datos y stack tecnológico.
+2.  **[Contratos Inteligentes](docs/SMART_CONTRACTS.md)**: Detalle de la lógica de Escrow y Split.
+3.  **[Modelo de Datos](docs/DATABASE.md)**: Estructura de tablas en Supabase.
+4.  **[Guía de Usuario](docs/USER_GUIDE.md)**: Manual para Productoras, Artistas y Auditores.
 
-## App explicativa y pitch
+---
 
-- La app de guía se encuentra en `frontend/src/App.tsx`.
-- El pitch deck de la entrega está en `PITCH_DECK.md`.
-- Usa la app para presentar el flujo: problema, solución y demo.
-- Si desplegás `EscrowSplit.sol`, actualizá `CONTRACT_V2_ADDRESS` en el frontend para activar la demo interactiva.
+## 🚀 Inicio Rápido
 
-### Ejecutar la app
+### Requisitos Previos
+- Node.js v18+
+- Wallet Metamask configurada para **Avalanche Fuji**.
 
+### Instalación del Entorno
+1. Clonar el repositorio.
+2. Instalar dependencias globales:
+   ```bash
+   npm install
+   ```
+3. Configurar variables de entorno (ver `.env.example`).
+
+### Ejecución del Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+
+### Ejecución de Tests (Contracts)
+```bash
+npm test
+```
+
+---
+
+## 🏆 Proyecto para la Hackathon Avalanche 2026
+
+Este proyecto busca transformar la realidad de los festivales en el norte argentino, utilizando la tecnología blockchain para traer transparencia y agilidad a una industria tradicionalmente lenta y burocrática.
+
+**Desarrollado con ❤️ para Salta y el ecosistema Avalanche.**
+

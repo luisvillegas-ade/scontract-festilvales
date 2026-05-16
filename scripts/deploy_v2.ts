@@ -1,36 +1,33 @@
 import { network } from "hardhat";
 
 async function main() {
+  console.log("--- Despliegue de EscrowSplitV2 en Avalanche Fuji ---");
+
   const { ethers } = await (network as any).create();
-  const [deployer] = await ethers.getSigners();
 
-  // ─── Wallets ───────────────────────────────────────────────────────
-  // La productora (corporateWallet) es la misma que despliega (el owner)
-  const CORPORATE_WALLET = deployer.address;
-  const MUNICIPAL_WALLET = "0x6424E7f96027e00a379e40ef8de5e61361d3AdB4";
+  // Wallets from screenshot (lowercased to avoid checksum errors)
+  const CORPORATE_WALLET = "0x4ccb7b5046a4ced166c4c4d29c16ee4dffbfa4e7"; // Productora
+  const MUNICIPAL_WALLET = "0x6424e19557c3e8f81e48b0970e9d9d999903adb4"; // Municipalidad
 
-  console.log("🏔️  AvalanchePay Salta — Despliegue EscrowSplitV2");
-  console.log("══════════════════════════════════════════════════════");
-  console.log(`📬 Deployer / Productora: ${CORPORATE_WALLET}`);
-  console.log(`🏛️  Municipalidad Salta:   ${MUNICIPAL_WALLET}`);
-  console.log("──────────────────────────────────────────────────────");
-  console.log("📡 Desplegando en Avalanche Fuji Testnet...");
+  console.log(`Billetera Corporativa: ${CORPORATE_WALLET}`);
+  console.log(`Billetera Municipal: ${MUNICIPAL_WALLET}`);
 
   const EscrowSplitV2 = await ethers.getContractFactory("EscrowSplitV2");
+
+  console.log("Desplegando EscrowSplitV2...");
+
   const escrow = await EscrowSplitV2.deploy(CORPORATE_WALLET, MUNICIPAL_WALLET);
 
   await escrow.waitForDeployment();
-  const address = await escrow.getAddress();
 
-  console.log("══════════════════════════════════════════════════════");
-  console.log(`✅ Contrato EscrowSplitV2 desplegado!`);
-  console.log(`📍 Dirección:             ${address}`);
-  console.log(`🏢 Corporate Wallet (1%): ${CORPORATE_WALLET}`);
-  console.log(`🏛️  Municipal Wallet (2%): ${MUNICIPAL_WALLET}`);
-  console.log(`🎤 Artista recibe:        97%`);
-  console.log("──────────────────────────────────────────────────────");
-  console.log(`🔗 Snowtrace: https://testnet.snowtrace.io/address/${address}`);
-  console.log("══════════════════════════════════════════════════════");
+  const contractAddress = await escrow.getAddress();
+
+  console.log("----------------------------------------------------");
+  console.log(`✅ Contrato EscrowSplitV2 desplegado exitosamente!`);
+  console.log(`📍 Dirección: ${contractAddress}`);
+  console.log(`🏢 Corporate Wallet: ${CORPORATE_WALLET}`);
+  console.log(`🏛️ Municipal Wallet: ${MUNICIPAL_WALLET}`);
+  console.log("----------------------------------------------------");
 }
 
 main().catch((error) => {

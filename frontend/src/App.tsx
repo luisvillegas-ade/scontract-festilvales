@@ -1,25 +1,57 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
+import { ethers } from 'ethers'
+import { ESCROW_ABI } from './lib/abi'
 
-const CONTRACT_ADDRESS = "0x7f174cd2a62aE9FaB508cdd8F31edC1a3981f0b1"
+const CONTRACT_ADDRESS = "0x7BAbe0be4Db28d3a862BA3E3e57Ba01E311a2C42"
 const SNOWTRACE_BASE = "https://testnet.snowtrace.io/address/"
 
 const CONTRACT_TEMPLATES = [
   { 
     id: 'standard', 
     name: 'Show Festivalero Estándar (Salta)', 
-    text: `CONTRATO DE LOCACIÓN DE SERVICIOS ARTÍSTICOS\n\nEn la Ciudad de Salta, entre la Municipalidad y el Artista {{name}} (DNI {{dni}}), con domicilio en {{direccion}}, se conviene:\n\n1. OBJETO: El artista realizará una presentación en vivo.\n2. MONTO: {{amount}} AVAX.\n3. RETENCIONES: 3.6% AE y 1.2% Sellos (4.8% Total).\n4. PAGO: Vía Smart Contract Avalanche.`
+    text: `CONTRATO DE LOCACIÓN DE SERVICIOS ARTÍSTICOS
+
+En la Ciudad de Salta, entre la Empresa Productora responsable del evento "{{show_name}}", en adelante "LA PRODUCTORA", y el Artista {{name}}, DNI {{dni}}, CUIT {{cuit}}, con domicilio en {{direccion}}, en adelante "EL ARTISTA", se conviene lo siguiente:
+
+CLÁUSULA PRIMERA: OBJETO
+EL ARTISTA se obliga a prestar servicios artísticos consistentes en una presentación en vivo en el evento denominado "{{show_name}}", a realizarse en {{location}} el día {{show_date}}.
+
+CLÁUSULA SEGUNDA: CONTRA PRESTACIÓN
+LA PRODUCTORA abonará a EL ARTISTA la suma bruta de {{amount}} AVAX. 
+
+CLÁUSULA TERCERA: RETENCIONES FISCALES Y SELLADO
+De la suma mencionada se aplicarán las siguientes retenciones obligatorias según normativa provincial de Salta:
+1. Impuesto a las Actividades Económicas (AE): 3.6%.
+2. Impuesto de Sellos: 1.2%.
+Total de retenciones: 4.8%. El monto neto resultante será liquidado a favor de EL ARTISTA.
+
+CLÁUSULA CUARTA: MODALIDAD DE PAGO
+El pago se gestionará mediante un Contrato Inteligente (Smart Contract) en la red Avalanche Fuji (Protocolo Salta Fiscal). Los fondos quedarán en custodia (escrow) y serán liberados una vez confirmada la efectiva prestación del servicio.
+
+CLÁUSULA QUINTA: OBLIGACIONES
+EL ARTISTA se compromete a cumplir con el rider técnico acordado y presentarse con la debida antelación.
+
+CLÁUSULA SEXTA: JURISDICCIÓN
+Para cualquier controversia, las partes se someten a la jurisdicción de los Tribunales Ordinarios de la Ciudad de Salta.`
   },
   { 
     id: 'private', 
     name: 'Evento Privado / Corporativo', 
-    text: `CONTRATO PRIVADO DE ACTUACIÓN\n\nEntre la Productora y el Artista {{name}}, se acuerda la suma de {{amount}} AVAX.\nRetenciones fiscales provinciales (4.8%).`
+    text: `CONTRATO PRIVADO DE PRESTACIÓN ARTÍSTICA
+
+Entre la Productora Responsable del evento "{{show_name}}" y el Artista {{name}}, DNI {{dni}}, se acuerda la contratación para la fecha {{show_date}} en {{location}}.
+
+Monto acordado: {{amount}} AVAX.
+Se aplicarán las retenciones fiscales de ley vigentes en la Provincia de Salta (4.8% total).
+
+El pago se realiza mediante tecnología blockchain Avalanche para garantizar transparencia y seguridad en la liquidación de haberes.`
   }
 ]
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'productora' | 'artista' | 'control'>('productora')
+  const [activeTab, setActiveTab] = useState<'productora' | 'artista' | 'control' | 'banco' | null>(null)
   const [loading, setLoading] = useState(false)
   const [txStatus, setTxStatus] = useState<string | null>(null)
   const [showFullContract, setShowFullContract] = useState(false)
@@ -37,13 +69,16 @@ export default function App() {
   // Espectaculos state
   const [espectaculos, setEspectaculos] = useState<any[]>([])
   const [showModal, setShowModal] = useState(false)
+  const [editingShowId, setEditingShowId] = useState<number | null>(null)
   const [activeShow, setActiveShow] = useState<any>(null)
   const [showContractModal, setShowContractModal] = useState(false)
+  const [selectedContractForSign, setSelectedContractForSign] = useState<any>(null)
   
   const [newShow, setNewShow] = useState({
     nombre: '',
     provincia: 'Salta',
     anio: new Date().getFullYear().toString(),
+    fecha_ejecucion: '',
     presupuesto: '',
     descripcion: ''
   })
@@ -52,6 +87,10 @@ export default function App() {
     provincia: '',
     presupuesto: ''
   })
+
+  // Audit state (Solo para UI de feedback)
+  const [isConfirmingPerformance, setIsConfirmingPerformance] = useState<string | null>(null)
+  const [showSuccessModal, setShowSuccessModal] = useState<any>(null)
 
   // Registration Form State
   const [regForm, setRegForm] = useState({ name: '', dni: '', cuit: '', direccion: '' })
@@ -69,12 +108,24 @@ export default function App() {
   }
 
   const generatedText = selectedTemplate.text
-    .replace('{{name}}', selectedArtist?.name || '...')
-    .replace('{{dni}}', selectedArtist?.dni || '...')
-    .replace('{{direccion}}', selectedArtist?.direccion || '...')
-    .replace('{{amount}}', amount)
+    .replace(/{{name}}/g, selectedArtist?.name || '...')
+    .replace(/{{dni}}/g, selectedArtist?.dni || '...')
+    .replace(/{{cuit}}/g, selectedArtist?.cuit || '...')
+    .replace(/{{direccion}}/g, selectedArtist?.direccion || '...')
+    .replace(/{{amount}}/g, amount)
+    .replace(/{{show_name}}/g, activeShow?.nombre || 'Evento General')
+    .replace(/{{show_date}}/g, activeShow?.fecha_ejecucion ? new Date(activeShow.fecha_ejecucion).toLocaleDateString() : 'Fecha a confirmar')
+    .replace(/{{location}}/g, activeShow?.provincia || 'Salta, Argentina')
 
   // ─── EFFECTS ───
+  useEffect(() => { 
+    if (showContractModal || showFullContract || showSuccessModal || showModal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+  }, [showContractModal, showFullContract, showSuccessModal, showModal])
+
   useEffect(() => { 
     fetchArtists() 
     fetchEspectaculos()
@@ -83,14 +134,42 @@ export default function App() {
     if (account) {
       checkUserRegistration(account)
       fetchAllContracts()
+    } else {
+      setIsRegistered(false)
+      setArtistProfile(null)
+      setUserContracts([])
     }
   }, [account])
 
+  useEffect(() => {
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', (accounts: string[]) => {
+        setAccount(accounts[0] || null)
+      })
+    }
+  }, [])
+
   // ─── ACTIONS ───
   const connectWallet = async () => {
-    if (!window.ethereum) return alert("Instalá MetaMask")
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
-    setAccount(accounts[0])
+    console.log("Intentando conectar wallet...");
+    if (!window.ethereum) {
+      alert("No se detectó MetaMask. Por favor, instalá la extensión para continuar.");
+      return;
+    }
+    try {
+      setTxStatus("⏳ Conectando con MetaMask...");
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      if (accounts && accounts.length > 0) {
+        setAccount(accounts[0]);
+        setTxStatus(null);
+      } else {
+        setTxStatus("❌ No se seleccionó ninguna cuenta.");
+      }
+    } catch (err: any) {
+      console.error("Error al conectar wallet:", err);
+      setTxStatus("❌ Error de conexión: " + err.message);
+      setTimeout(() => setTxStatus(null), 4000);
+    }
   }
 
   const fetchArtists = async () => {
@@ -107,6 +186,8 @@ export default function App() {
       fetchUserContracts(wallet)
     } else {
       setIsRegistered(false)
+      setArtistProfile(null)
+      setUserContracts([])
       setRegForm({ name: '', dni: '', cuit: '', direccion: '' })
     }
   }
@@ -141,26 +222,67 @@ export default function App() {
     if (!newShow.nombre || !newShow.presupuesto) return alert("Completa los datos obligatorios")
     
     setLoading(true)
-    const { error } = await supabase.from('espectaculos').insert({
+    const showData = {
       nombre: newShow.nombre,
       provincia: newShow.provincia,
       anio: parseInt(newShow.anio),
+      fecha_ejecucion: newShow.fecha_ejecucion,
       presupuesto: parseFloat(newShow.presupuesto),
       descripcion: newShow.descripcion,
       empresa_wallet: account.toLowerCase(),
       imagen_url: `https://loremflickr.com/400/300/concert?lock=${Math.floor(Math.random() * 1000)}`
-    })
+    }
+
+    let error;
+    if (editingShowId) {
+      const { error: err } = await supabase
+        .from('espectaculos')
+        .update(showData)
+        .eq('id', editingShowId)
+      error = err
+    } else {
+      const { error: err } = await supabase.from('espectaculos').insert(showData)
+      error = err
+    }
 
     if (!error) {
-      setTxStatus("✅ Espectáculo Creado")
+      setTxStatus(editingShowId ? "✅ Espectáculo Actualizado" : "✅ Espectáculo Creado")
       fetchEspectaculos()
       setShowModal(false)
+      setEditingShowId(null)
       setNewShow({ nombre: '', provincia: 'Salta', anio: '2026', presupuesto: '', descripcion: '' })
     } else {
       setTxStatus("❌ Error: " + error.message)
     }
     setLoading(false)
     setTimeout(() => setTxStatus(null), 3000)
+  }
+
+  const handleDeleteShow = async (id: number) => {
+    if (!confirm("¿Estás seguro de eliminar este espectáculo? Se perderán todos los datos asociados.")) return
+    setLoading(true)
+    const { error } = await supabase.from('espectaculos').delete().eq('id', id)
+    if (!error) {
+      setTxStatus("✅ Espectáculo Eliminado")
+      fetchEspectaculos()
+    } else {
+      setTxStatus("❌ Error al eliminar: " + error.message)
+    }
+    setLoading(false)
+    setTimeout(() => setTxStatus(null), 3000)
+  }
+
+  const startEditShow = (show: any) => {
+    setEditingShowId(show.id)
+    setNewShow({
+      nombre: show.nombre,
+      provincia: show.provincia,
+      anio: show.anio.toString(),
+      fecha_ejecucion: show.fecha_ejecucion,
+      presupuesto: show.presupuesto.toString(),
+      descripcion: show.descripcion
+    })
+    setShowModal(true)
   }
 
   const filteredEspectaculos = espectaculos.filter(s => {
@@ -202,23 +324,124 @@ export default function App() {
   }
 
   const handleCreateContract = async () => {
-    if (!selectedArtist) return
-    setLoading(true)
-    setTxStatus("⏳ Generando Contrato e Impuestos...")
-    const { error } = await supabase.from('contratos').insert({
-      show_name: activeShow?.nombre || selectedTemplate.name,
-      artist_wallet: selectedArtist.wallet.toLowerCase(),
-      amount: parseFloat(amount),
-      ipfs_hash: generatedText.slice(0, 50),
-      status: 'Funded',
-      municipality_wallet: account?.toLowerCase()
-    })
-    if (!error) {
-      setTxStatus("✅ ÉXITO: Liquidación Generada.")
-      fetchAllContracts()
-      setShowContractModal(false)
+    if (!selectedArtist || !window.ethereum || !account) return
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      setTxStatus("⚠️ Por favor, ingresa un monto válido.")
+      setLoading(false)
+      return
+    }
+
+    try {
+      console.log("🚀 Iniciando creación de contrato para:", selectedArtist.wallet)
+      const provider = new ethers.BrowserProvider(window.ethereum as any)
+      const signer = await provider.getSigner()
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, ESCROW_ABI, signer)
+      
+      const val = ethers.parseEther(amount)
+      const ipfsHash = `scontract_${Date.now()}`
+      
+      setTxStatus("⏳ Revisa tu MetaMask para confirmar el depósito...")
+      console.log("📡 Enviando transacción 'depositarEscrow'...")
+      
+      // Limpiamos el address por si acaso
+      const artistAddr = selectedArtist.wallet.trim()
+      
+      // Comprobamos saldo antes de intentar
+      const balance = await provider.getBalance(account)
+      if (balance < val) {
+        throw new Error("Saldo insuficiente en tu wallet para cubrir el depósito y el gas.")
+      }
+
+      // Forzamos un gasLimit para evitar fallos de estimación en Fuji
+      const tx = await contract.depositarEscrow(artistAddr, ipfsHash, { 
+        value: val,
+        gasLimit: 500000 // Límite generoso para evitar 'missing revert data'
+      })
+      
+      setTxStatus("⏳ Transacción enviada. Esperando confirmación en Fuji...")
+      console.log("🔗 TX Hash:", tx.hash)
+      await tx.wait()
+      console.log("✅ Transacción confirmada!")
+      
+      const { error } = await supabase.from('contratos').insert({
+        show_id: activeShow?.id,
+        show_name: activeShow?.nombre || selectedTemplate.name,
+        fecha_show: activeShow?.fecha_ejecucion,
+        hora_show: "21:00",
+        artist_wallet: selectedArtist.wallet.toLowerCase(),
+        amount: parseFloat(amount),
+        ipfs_hash: ipfsHash,
+        status: 'Funded',
+        template_id: selectedTemplate.id,
+        municipality_wallet: account?.toLowerCase()
+      })
+      
+      if (!error) {
+        setTxStatus("✅ ÉXITO: Contrato en Blockchain y DB.")
+        setShowSuccessModal({
+          artist: selectedArtist.name,
+          amount: amount,
+          txHash: tx.hash,
+          ipfsHash: ipfsHash
+        })
+        fetchAllContracts()
+        setShowContractModal(false)
+      } else {
+        setTxStatus("⚠️ DB Error: " + error.message)
+      }
+    } catch (e: any) {
+      console.error("❌ Error en la transacción:", e)
+      setTxStatus("❌ Error Blockchain: " + (e.reason || e.message || "Fallo en la firma"))
     }
     setLoading(false)
+  }
+
+  const handleReleaseFunds = async (ipfsHash: string) => {
+    if (!window.ethereum || !account) return
+    setLoading(true)
+    setTxStatus("⏳ Ejecutando Split Triple en Avalanche...")
+    
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum as any)
+      const signer = await provider.getSigner()
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, ESCROW_ABI, signer)
+      
+      const tx = await contract.liberarPagoEscrow(ipfsHash)
+      setTxStatus("⏳ Confirmando Liquidación...")
+      await tx.wait()
+      
+      const { error } = await supabase
+        .from('contratos')
+        .update({ status: 'Released' })
+        .eq('ipfs_hash', ipfsHash)
+      
+      if (!error) {
+        setTxStatus("✅ ÉXITO: Fondos Distribuidos (95.2% Artista, 4.8% Tax).")
+        fetchAllContracts()
+        if (account) fetchUserContracts(account)
+      }
+    } catch (e: any) {
+      console.error(e)
+      setTxStatus("❌ Error: " + (e.reason || e.message))
+    }
+    setLoading(false)
+  }
+
+  const handleConfirmPerformance = async (contractId: string) => {
+    setLoading(true)
+    setTxStatus("⏳ Registrando cumplimiento del artista...")
+    const { error } = await supabase
+      .from('contratos')
+      .update({ status: 'Confirmed' })
+      .eq('id', contractId)
+    
+    if (!error) {
+      setTxStatus("✅ Actuación Confirmada. Esperando liberación de la Productora.")
+      if (account) fetchUserContracts(account)
+      fetchAllContracts()
+    }
+    setLoading(false)
+    setTimeout(() => setTxStatus(null), 3000)
   }
 
   const handleRejectContract = async () => {
@@ -242,23 +465,148 @@ export default function App() {
     }
     setLoading(false)
   }
+  const handleSignContract = async (contractId: string) => {
+    setLoading(true)
+    setTxStatus("⏳ Procesando Firma Digital y Liquidación...")
+    const { error } = await supabase
+      .from('contratos')
+      .update({ status: 'Signed' }) // Cambiado de Released a Signed
+      .eq('id', contractId)
+    
+    if (!error) {
+      setTxStatus("✅ ÉXITO: Contrato Firmado y Liquidado.")
+      if (account) fetchUserContracts(account)
+      fetchAllContracts()
+      setShowFullContract(false)
+    } else {
+      setTxStatus("❌ Error al firmar: " + error.message)
+    }
+    setLoading(false)
+    setTimeout(() => setTxStatus(null), 4000)
+  }
+
+  const handleDownloadPDF = (contract: any) => {
+    setTxStatus(`⏳ Generando PDF para: ${contract.show_name}...`)
+    setTimeout(() => {
+      window.print()
+      setTxStatus(null)
+    }, 1500)
+  }
+
+  const handleRequestFiat = async (contractId: string) => {
+    setLoading(true)
+    setTxStatus("⏳ Solicitando Liquidación a Cuenta Bancaria...")
+    const { error } = await supabase
+      .from('contratos')
+      .update({ status: 'FiatPending' })
+      .eq('id', contractId)
+    
+    if (!error) {
+      setTxStatus("✅ Solicitud enviada al Banco.")
+      if (account) fetchUserContracts(account)
+      fetchAllContracts()
+    } else {
+      setTxStatus("❌ Error: " + error.message)
+    }
+    setLoading(false)
+    setTimeout(() => setTxStatus(null), 3000)
+  }
+
+  const handleSettleFiat = async (contractId: string) => {
+    setLoading(true)
+    setTxStatus("⏳ Transfiriendo Pesos al Artista (Off-Ramp)...")
+    // Simulamos delay del banco
+    setTimeout(async () => {
+      const { error } = await supabase
+        .from('contratos')
+        .update({ status: 'FiatSettled' })
+        .eq('id', contractId)
+      
+      if (!error) {
+        setTxStatus("✅ ÉXITO: Transferencia Bancaria Completada.")
+        fetchAllContracts()
+      } else {
+        setTxStatus("❌ Error bancario: " + error.message)
+      }
+      setLoading(false)
+      setTimeout(() => setTxStatus(null), 4000)
+    }, 2000)
+  }
+
+  // --- SUB COMPONENTS ---
+  const RoleSelector = () => (
+    <div className="animate-in" style={{ 
+      display: 'grid', 
+      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+      gap: '1rem', 
+      padding: '1rem',
+      maxWidth: '900px',
+      margin: '0 auto'
+    }}>
+      <div 
+        className={`card role-card ${isRegistered ? 'disabled' : ''}`} 
+        onClick={() => !isRegistered && setActiveTab('productora')} 
+        style={{ cursor: isRegistered ? 'not-allowed' : 'pointer', textAlign: 'center', opacity: isRegistered ? 0.6 : 1, padding: '1.5rem' }}
+      >
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🏢</div>
+        <div className="card-title" style={{ fontSize: '0.9rem' }}>Soy Productora</div>
+        <div className="card-subtitle" style={{ fontSize: '0.7rem', marginBottom: '0' }}>
+          Gestionar shows.
+        </div>
+      </div>
+      
+      <div className="card role-card" onClick={() => setActiveTab('artista')} style={{ cursor: 'pointer', textAlign: 'center', padding: '1.5rem' }}>
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🎸</div>
+        <div className="card-title" style={{ fontSize: '0.9rem' }}>Soy Artista</div>
+        <div className="card-subtitle" style={{ fontSize: '0.7rem', marginBottom: '0' }}>Firmar y cobrar.</div>
+      </div>
+
+      <div 
+        className={`card role-card ${isRegistered ? 'disabled' : ''}`} 
+        onClick={() => !isRegistered && setActiveTab('control')} 
+        style={{ cursor: isRegistered ? 'not-allowed' : 'pointer', textAlign: 'center', opacity: isRegistered ? 0.6 : 1, padding: '1.5rem' }}
+      >
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🔍</div>
+        <div className="card-title" style={{ fontSize: '0.9rem' }}>Control</div>
+        <div className="card-subtitle" style={{ fontSize: '0.7rem', marginBottom: '0' }}>
+          Fiscalización.
+        </div>
+      </div>
+
+      <div 
+        className={`card role-card ${isRegistered ? 'disabled' : ''}`} 
+        onClick={() => !isRegistered && setActiveTab('banco')} 
+        style={{ cursor: isRegistered ? 'not-allowed' : 'pointer', textAlign: 'center', opacity: isRegistered ? 0.6 : 1, padding: '1.5rem' }}
+      >
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🏦</div>
+        <div className="card-title" style={{ fontSize: '0.9rem' }}>Banco</div>
+        <div className="card-subtitle" style={{ fontSize: '0.7rem', marginBottom: '0' }}>
+          Liquidador Fiat.
+        </div>
+      </div>
+    </div>
+  )
 
   const [productoraSubView, setProductoraSubView] = useState<'espectaculos' | 'artistas'>('espectaculos')
 
   const shortAddr = (a: string) => `${a.slice(0, 6)}...${a.slice(-4)}`
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="logo">
-          <div className="logo-icon">🏛️</div>
-          <div><div className="logo-text">Salta Fiscal</div><div className="logo-sub">Gestión & Sellos</div></div>
-        </div>
-        <nav className="nav">
-          <button className={`nav-item ${activeTab === 'productora' ? 'active' : ''}`} onClick={() => { setActiveTab('productora'); setProductoraSubView('espectaculos'); }}>🏢 Soy Productora</button>
-          <button className={`nav-item ${activeTab === 'artista' ? 'active' : ''}`} onClick={() => setActiveTab('artista')}>🎸 Soy Artista</button>
-          <button className={`nav-item ${activeTab === 'control' ? 'active' : ''}`} onClick={() => setActiveTab('control')}>🔍 Soy Órgano de Control</button>
-        </nav>
+    <div className={`app ${!activeTab ? 'app-no-sidebar' : ''}`}>
+      {activeTab && (
+        <aside className="sidebar">
+          <div className="logo" onClick={() => setActiveTab(null)} style={{ cursor: 'pointer' }}>
+            <div className="logo-icon">🏛️</div>
+            <div><div className="logo-text">Salta Fiscal</div><div className="logo-sub">B2B Dashboard</div></div>
+          </div>
+          <nav className="nav">
+            {activeTab === 'productora' && <button className="nav-item active">🏢 Gestión de Shows</button>}
+            {activeTab === 'artista' && <button className="nav-item active">🎸 Mis Contratos</button>}
+            {activeTab === 'control' && <button className="nav-item active">🔍 Auditoría Fiscal</button>}
+            {activeTab === 'banco' && <button className="nav-item active">🏦 Liquidaciones Fiat</button>}
+          </nav>
+          
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 'auto', marginBottom: '1rem' }} onClick={() => setActiveTab(null)}>⇄ Cambiar Perfil</button>
 
         {account && (
           <div className="network-badge" style={{ marginTop: 'auto' }}>
@@ -277,31 +625,38 @@ export default function App() {
           </div>
         )}
       </aside>
+      )}
 
       <main className="main">
-        <header className="topbar">
-          <div className="page-title">
-            {activeTab === 'productora' && 'Panel de Productora'}
-            {activeTab === 'artista' && 'Panel de Artista'}
-            {activeTab === 'control' && 'Control de Liquidaciones'}
-          </div>
-          <button className="btn btn-primary" onClick={connectWallet}>{account ? shortAddr(account) : 'Identidad Digital'}</button>
-        </header>
+        {account && (
+          <header className="topbar">
+            <div className="page-title">
+              {!activeTab ? 'Selecciona tu Perfil' : 
+                activeTab === 'productora' ? 'Panel de Productora' : 
+                activeTab === 'artista' ? 'Panel de Artista' : 'Panel de Control'}
+            </div>
+            <button className="btn btn-primary" onClick={connectWallet}>{shortAddr(account)}</button>
+          </header>
+        )}
 
         {txStatus && <div className="connect-banner animate-in"><strong style={{ color: 'var(--accent)' }}>{txStatus}</strong></div>}
 
-        {/* ── PRODUCTORA ── */}
-        {activeTab === 'productora' && (
-          <div className="animate-in">
-            {!account ? (
-              <div className="card" style={{ textAlign: 'center', padding: '4rem' }}>
-                <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>🔐</div>
-                <div className="card-title" style={{ fontSize: '1.5rem' }}>Identidad Digital Requerida</div>
-                <div className="card-subtitle">Para gestionar tus espectáculos y artistas, debes conectar tu firma digital.</div>
-                <button className="btn btn-primary btn-lg" style={{ maxWidth: '300px', margin: '0 auto' }} onClick={connectWallet}>Conectar Wallet</button>
-              </div>
-            ) : (
-              <>
+        {!account ? (
+          <div className="hero-section animate-in" style={{ position: 'relative', zIndex: 100 }}>
+            <div className="hero-graphic" style={{ backgroundImage: 'url(/hero.png)' }}></div>
+            <h1 className="hero-title">SContract Artistas Salta</h1>
+            <p className="hero-subtitle">
+              Infraestructura digital para la gestión de espectáculos, contratos inteligentes y recaudación fiscal automatizada sobre la red Avalanche.
+            </p>
+            <button className="btn btn-primary btn-lg" onClick={connectWallet}>Comenzar con Identidad Digital</button>
+          </div>
+        ) : !activeTab ? (
+          <RoleSelector />
+        ) : (
+          <>
+            {/* ── PRODUCTORA ── */}
+            {activeTab === 'productora' && (
+              <div className="animate-in">
                 <div className="tabs-sub" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
                   <button className={`btn ${productoraSubView === 'espectaculos' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setProductoraSubView('espectaculos')}>🎭 Mis Espectáculos</button>
                   <button className={`btn ${productoraSubView === 'artistas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setProductoraSubView('artistas')}>📇 Directorio de Artistas</button>
@@ -341,7 +696,13 @@ export default function App() {
                             {show.nombre.includes('Festival') ? '🎉' : show.nombre.includes('Peña') ? '🎸' : '🎭'}
                           </div>
                           <div className="show-card-content">
-                            <div className="show-card-title">{show.nombre}</div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div className="show-card-title">{show.nombre}</div>
+                              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                <button className="btn btn-sm btn-ghost" style={{ padding: '0.2rem' }} onClick={() => startEditShow(show)} title="Editar">✏️</button>
+                                <button className="btn btn-sm btn-ghost" style={{ padding: '0.2rem', color: 'var(--error)' }} onClick={() => handleDeleteShow(show.id)} title="Eliminar">🗑️</button>
+                              </div>
+                            </div>
                             <div className="show-card-info">
                               <span className="show-card-badge">{show.anio}</span>
                               <span className="show-card-badge">{show.provincia}</span>
@@ -349,6 +710,9 @@ export default function App() {
                             <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '1rem', minHeight: '3em' }}>
                               {show.descripcion || 'Sin descripción disponible.'}
                             </p>
+                            <div className="show-card-info" style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--primary)' }}>
+                              📅 {show.fecha_ejecucion ? new Date(show.fecha_ejecucion).toLocaleDateString() : 'Sin fecha'}
+                            </div>
                             <div className="show-card-budget">
                               {show.presupuesto} <span style={{ fontSize: '0.8rem', color: 'var(--text-mid)' }}>AVAX</span>
                             </div>
@@ -379,7 +743,7 @@ export default function App() {
                             <th>Monto</th>
                             <th>Estado</th>
                             <th>Feedback Artista</th>
-                            <th>Auditoría</th>
+                            <th>Acción / Liquidación</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -391,26 +755,62 @@ export default function App() {
                                 <td>{shortAddr(c.artist_wallet)}</td>
                                 <td>{c.amount} AVAX</td>
                                 <td>
-                                  <span className={`badge ${c.status === 'Rejected' ? 'badge-cancelled' : 'badge-released'}`}>
-                                    {c.status === 'Funded' ? 'Pendiente' : 
-                                     c.status === 'Rejected' ? 'Rechazado' : 
-                                     c.status === 'Released' ? 'Liquidado' : c.status}
-                                  </span>
+                                  <span className={`badge ${
+                                     c.status === 'Rejected' ? 'badge-cancelled' : 
+                                     c.status === 'Funded' ? 'badge-funded' :
+                                     c.status === 'Signed' ? 'badge-released' :
+                                     c.status === 'Confirmed' ? 'badge-confirmed' : 'badge-released'
+                                   }`}>
+                                     {c.status === 'Funded' ? 'Pendiente Firma' : 
+                                      c.status === 'Signed' ? 'Contrato Firmado' :
+                                      c.status === 'Confirmed' ? 'Show Realizado' :
+                                      c.status === 'Rejected' ? 'Rechazado' : 'Liquidado'}
+                                   </span>
                                 </td>
                                 <td style={{ fontSize: '0.8rem', fontStyle: 'italic', color: 'var(--text-mid)' }}>
                                   {c.status === 'Rejected' ? c.rejection_reason : '-'}
                                 </td>
-                                <td>
-                                  <a 
-                                    href={`${SNOWTRACE_BASE}${CONTRACT_ADDRESS}`} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="btn btn-sm btn-ghost"
-                                    style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}
-                                  >
-                                    🔗 Explorer
-                                  </a>
-                                </td>
+                                 <td>
+                                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                     {c.status === 'Confirmed' ? (
+                                       <button 
+                                         className="btn btn-sm btn-primary" 
+                                         style={{ background: 'var(--success)' }}
+                                         onClick={() => handleReleaseFunds(c.ipfs_hash)}
+                                       >
+                                         💰 Finalizar y Pagar
+                                       </button>
+                                     ) : c.status === 'Funded' ? (
+                                       <span style={{ fontSize: '0.7rem', color: 'var(--warning)' }}>⏳ Esperando Firma</span>
+                                     ) : c.status === 'Signed' ? (
+                                       <span style={{ fontSize: '0.7rem', color: 'var(--text-mid)' }}>📅 Esperando Show</span>
+                                     ) : (
+                                       <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>-</span>
+                                     )}
+                                     {c.status !== 'Rejected' && (
+                                       <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                         <a 
+                                           href={`${SNOWTRACE_BASE}${CONTRACT_ADDRESS}`} 
+                                           target="_blank" 
+                                           rel="noreferrer"
+                                           className="btn btn-sm btn-ghost"
+                                           style={{ padding: '0.4rem' }}
+                                           title="Ver en Avalanche Explorer"
+                                         >
+                                           🔗
+                                         </a>
+                                         <button 
+                                           className="btn btn-sm btn-ghost" 
+                                           style={{ padding: '0.4rem' }} 
+                                           onClick={() => handleDownloadPDF(c)}
+                                           title="Descargar Contrato PDF"
+                                         >
+                                           📥
+                                         </button>
+                                       </div>
+                                     )}
+                                   </div>
+                                 </td>
                               </tr>
                             ))}
                         </tbody>
@@ -418,9 +818,19 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  <div className="card animate-in">
-                    <div className="card-title">📇 Directorio de Artistas Disponibles</div>
-                    <div className="card-subtitle" style={{ marginBottom: '1.5rem' }}>Ecosistema unificado de artistas y prestadores de Salta.</div>
+                  <div className="animate-in">
+                    {activeShow && (
+                      <div className="card" style={{ background: 'var(--surface-2)', border: '1px solid var(--primary)', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--primary)', fontWeight: 700 }}>Contratando para</div>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{activeShow.nombre}</div>
+                        </div>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setProductoraSubView('espectaculos')}>← Volver a Mis Espectáculos</button>
+                      </div>
+                    )}
+                    <div className="card">
+                      <div className="card-title">📇 Directorio de Artistas Disponibles</div>
+                      <div className="card-subtitle" style={{ marginBottom: '1.5rem' }}>Ecosistema unificado de artistas y prestadores de Salta.</div>
                     <table className="deal-table">
                       <thead><tr><th>Nombre</th><th>DNI</th><th>Wallet</th><th>Acción</th></tr></thead>
                       <tbody>
@@ -434,17 +844,18 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 )}
-              </>
+              </div>
             )}
-          </div>
-        )}
 
         {showModal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', backdropFilter: 'blur(4px)' }}>
             <div className="card animate-in" style={{ maxWidth: '500px', width: '100%', border: '1px solid var(--primary)' }}>
-              <div className="card-title" style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>✨ Cargar Nuevo Espectáculo</div>
+              <div className="card-title" style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>
+                {editingShowId ? '✏️ Editar Espectáculo' : '✨ Cargar Nuevo Espectáculo'}
+              </div>
               <div className="form-group">
                 <label>Nombre del Evento</label>
                 <input placeholder="Ej: Festival del Poncho" value={newShow.nombre} onChange={e => setNewShow({...newShow, nombre: e.target.value})} />
@@ -457,8 +868,8 @@ export default function App() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Año</label>
-                  <input type="number" value={newShow.anio} onChange={e => setNewShow({...newShow, anio: e.target.value})} />
+                  <label>Fecha de Ejecución</label>
+                  <input type="date" value={newShow.fecha_ejecucion} onChange={e => setNewShow({...newShow, fecha_ejecucion: e.target.value})} />
                 </div>
               </div>
               <div className="form-group">
@@ -470,46 +881,116 @@ export default function App() {
                 <textarea placeholder="Detalles del espectáculo..." style={{ minHeight: '100px' }} value={newShow.descripcion} onChange={e => setNewShow({...newShow, descripcion: e.target.value})} />
               </div>
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                <button className="btn btn-primary btn-lg" onClick={handleCreateShow} disabled={loading}>{loading ? 'Cargando...' : 'Guardar Espectáculo'}</button>
-                <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancelar</button>
+                <button className="btn btn-primary btn-block" onClick={handleCreateShow} disabled={loading}>
+                  {loading ? 'Guardando...' : editingShowId ? 'Actualizar' : 'Guardar'}
+                </button>
+                <button className="btn btn-ghost" onClick={() => { setShowModal(false); setEditingShowId(null); setNewShow({ nombre: '', provincia: 'Salta', anio: '2026', presupuesto: '', descripcion: '', fecha_ejecucion: '' }); }}>
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>
         )}
 
         {showContractModal && selectedArtist && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', backdropFilter: 'blur(4px)' }}>
-            <div className="panel-grid animate-in" style={{ maxWidth: '1000px', width: '100%' }}>
-              <div className="card">
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backdropFilter: 'blur(4px)', overflowY: 'auto' }}>
+            <div className="panel-grid animate-in" style={{ maxWidth: '1100px', width: '100%', maxHeight: '95vh', margin: 'auto' }}>
+              <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
                 <div className="card-title">📜 Liquidación y Sellos</div>
-                <div className="card-subtitle">Contratando a <strong>{selectedArtist.name}</strong> para <strong>{activeShow?.nombre || 'Evento'}</strong></div>
+                <div className="card-subtitle" style={{ marginBottom: '1rem' }}>Finalizando detalles de contratación y fiscalización.</div>
                 
-                <div className="form-group">
-                  <label>Plantilla Legal</label>
-                  <select className="input" style={{ width: '100%', background: 'var(--surface-2)', color: 'white' }} onChange={(e) => setSelectedTemplate(CONTRACT_TEMPLATES.find(t => t.id === e.target.value)!)}>
-                    {CONTRACT_TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
+                <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1rem' }}>
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label style={{ marginBottom: '0.25rem' }}>Evento / Espectáculo</label>
+                    <div style={{ background: 'var(--surface-2)', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--primary)', fontWeight: 700, color: 'var(--primary)', fontSize: '0.85rem' }}>
+                      🏟️ {activeShow?.nombre || 'Evento General'}
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label style={{ marginBottom: '0.25rem' }}>Artista / Proveedor</label>
+                    <div style={{ background: 'var(--surface-2)', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border)', fontWeight: 600, fontSize: '0.85rem' }}>
+                      🎸 {selectedArtist.name} ({selectedArtist.dni})
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label style={{ marginBottom: '0.25rem' }}>Plantilla Legal</label>
+                    <select className="input" style={{ width: '100%', background: 'var(--surface-2)', color: 'white', padding: '0.6rem' }} onChange={(e) => setSelectedTemplate(CONTRACT_TEMPLATES.find(t => t.id === e.target.value)!)}>
+                      {CONTRACT_TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                    <label style={{ marginBottom: '0.25rem' }}>Monto Bruto (AVAX)</label>
+                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} disabled={loading} style={{ padding: '0.6rem' }} />
+                  </div>
+                  
+                  <div className="split-preview" style={{ padding: '0.75rem', marginBottom: '0' }}>
+                    <div className="split-row" style={{ fontSize: '0.8rem' }}><span>Bruto:</span> <strong>{split.total.toFixed(10)}</strong></div>
+                    <div className="split-row" style={{ fontSize: '0.8rem' }}><span style={{ color: 'var(--warning)' }}>DGR AE (3.6%):</span> <strong>- {split.taxAE.toFixed(10)}</strong></div>
+                    <div className="split-row" style={{ fontSize: '0.8rem' }}><span style={{ color: 'var(--accent)' }}>Imp. Sellos (1.2%):</span> <strong>- {split.taxSellos.toFixed(10)}</strong></div>
+                    <div className="split-row" style={{ fontSize: '0.8rem' }}><span>Neto Artista:</span> <strong style={{ color: 'var(--success)', fontSize: '1rem' }}>{split.net.toFixed(10)}</strong></div>
+                  </div>
                 </div>
-                <div className="form-group"><label>Monto Bruto (AVAX)</label><input type="number" value={amount} onChange={e => setAmount(e.target.value)} /></div>
-                
-                <div className="split-preview">
-                  <div className="split-row"><span>Bruto:</span> <strong>{split.total.toFixed(10)}</strong></div>
-                  <div className="split-row"><span style={{ color: 'var(--warning)' }}>DGR AE (3.6%):</span> <strong>- {split.taxAE.toFixed(10)}</strong></div>
-                  <div className="split-row"><span style={{ color: 'var(--accent)' }}>Imp. Sellos (1.2%):</span> <strong>- {split.taxSellos.toFixed(10)}</strong></div>
-                  <div className="split-row"><span>Neto Artista:</span> <strong style={{ color: 'var(--success)', fontSize: '1.2rem' }}>{split.net.toFixed(10)}</strong></div>
-                </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button className="btn btn-primary btn-lg" onClick={handleCreateContract}>Generar y Liquidar</button>
-                  <button className="btn btn-ghost" onClick={() => setShowContractModal(false)}>Cancelar</button>
+
+                <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+                  <button className="btn btn-primary btn-block" style={{ flex: 2 }} onClick={handleCreateContract} disabled={loading}>
+                    {loading ? 'Procesando...' : 'Generar y Liquidar'}
+                  </button>
+                  <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowContractModal(false)} disabled={loading}>Cancelar</button>
                 </div>
               </div>
 
-              <div className="card">
-                <div className="card-title">📄 Documento Generado</div>
-                <div style={{ background: 'var(--surface-2)', padding: '1rem', borderRadius: '8px', fontSize: '0.8rem', whiteSpace: 'pre-line', marginTop: '1rem', height: '350px', overflowY: 'auto', border: '1px solid var(--border)' }}>
-                  {generatedText}
+              <div className="card" style={{ padding: '0', overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>Vista Previa</span>
+                  <span className="badge badge-funded" style={{ fontSize: '0.55rem' }}>Borrador Digital</span>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem', background: '#222' }}>
+                  <div className="contract-paper" style={{ transform: 'scale(0.85)', transformOrigin: 'top center', margin: '0 auto' }}>
+                    <div className="contract-watermark" style={{ fontSize: '3rem' }}>
+                      {txStatus?.includes('✅') ? 'FIRMADO' : 'BORRADOR'}
+                    </div>
+                    
+                    <div className="contract-header" style={{ marginBottom: '1rem' }}>
+                      <div className="contract-title" style={{ fontSize: '1rem' }}>Instrumento Legal</div>
+                      <div style={{ fontSize: '0.6rem', marginTop: '0.2rem', color: '#666' }}>Digital ID: {selectedArtist?.wallet?.slice(0, 10).toUpperCase()}</div>
+                    </div>
+
+                    <div className="contract-body" style={{ fontSize: '0.85rem' }}>
+                      {generatedText}
+                    </div>
+
+                    <div className="signature-section" style={{ marginTop: '2rem', gap: '1rem' }}>
+                      <div className="signature-box" style={{ paddingTop: '0.5rem', fontSize: '0.65rem' }}>
+                        Por LA PRODUCTORA
+                      </div>
+                      <div className="signature-box" style={{ paddingTop: '0.5rem', fontSize: '0.65rem' }}>
+                        Por EL ARTISTA
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE ÉXITO */}
+        {showSuccessModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', backdropFilter: 'blur(10px)' }}>
+            <div className="card animate-in" style={{ maxWidth: '450px', width: '100%', textAlign: 'center', padding: '3rem', border: '1px solid var(--success)' }}>
+              <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>✅</div>
+              <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>¡Contrato en Blockchain!</h2>
+              <p style={{ color: 'var(--text-dim)', marginBottom: '2rem' }}>
+                Se ha generado el contrato para <strong>{showSuccessModal.artist}</strong> por <strong>{showSuccessModal.amount} AVAX</strong>.
+              </p>
+              
+              <div style={{ background: 'var(--surface-2)', padding: '1rem', borderRadius: '8px', textAlign: 'left', marginBottom: '2rem', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Transaction Hash (Fuji)</div>
+                <div style={{ fontSize: '0.75rem', fontFamily: 'monospace', wordBreak: 'break-all', color: 'var(--accent)' }}>{showSuccessModal.txHash}</div>
+              </div>
+
+              <button className="btn btn-primary btn-lg" onClick={() => setShowSuccessModal(null)}>Entendido</button>
             </div>
           </div>
         )}
@@ -517,14 +998,7 @@ export default function App() {
         {/* ── ARTISTA ── */}
         {activeTab === 'artista' && (
           <div className="animate-in">
-            {!account ? (
-              <div className="card" style={{ textAlign: 'center', padding: '4rem' }}>
-                <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>🔐</div>
-                <div className="card-title" style={{ fontSize: '1.5rem' }}>Identidad Digital Requerida</div>
-                <div className="card-subtitle">Para ver tus propuestas y perfil, debes conectar tu firma digital.</div>
-                <button className="btn btn-primary btn-lg" style={{ maxWidth: '300px', margin: '0 auto' }} onClick={connectWallet}>Conectar Wallet</button>
-              </div>
-            ) : !isRegistered || isEditing ? (
+            {!isRegistered || isEditing ? (
               <div className="card" style={{ maxWidth: '400px', margin: '0 auto' }}>
                 <div className="card-title">{isEditing ? 'Editar Registro' : 'Registro de Proveedor'}</div>
                 <div className="card-subtitle" style={{ marginBottom: '1.5rem' }}>Mantené tus datos actualizados para tus contratos.</div>
@@ -554,84 +1028,194 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="panel-grid">
-                <div className="card">
-                  <div className="card-title">👤 {artistProfile.name}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', lineHeight: '1.6' }}>
-                    DNI: {artistProfile.dni}<br/>
-                    CUIT: {artistProfile.cuit}<br/>
-                    Dir: {artistProfile.direccion}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div className="stats-grid">
+                  <div className="card stat-card">
+                    <div className="stat-label">Proveedor / Artista</div>
+                    <div className="stat-value" style={{ fontSize: '1.3rem' }}>{artistProfile.name}</div>
+                    <div className="stat-change" style={{ color: 'var(--text-dim)' }}>DNI: {artistProfile.dni}</div>
                   </div>
-                  <button className="btn btn-sm btn-ghost" style={{ marginTop: '1rem' }} onClick={() => setIsEditing(true)}>📝 Editar Perfil</button>
+                  <div className="card stat-card">
+                    <div className="stat-label">CUIT Registro</div>
+                    <div className="stat-value" style={{ fontSize: '1.1rem' }}>{artistProfile.cuit}</div>
+                    <div className="stat-change" style={{ color: 'var(--text-dim)' }}>Válido en Salta</div>
+                  </div>
+                  <div className="card stat-card">
+                    <div className="stat-label">Contratos Totales</div>
+                    <div className="stat-value">{userContracts.length}</div>
+                    <div className="stat-change" style={{ color: 'var(--success)' }}>Firma Digital Habilitada</div>
+                  </div>
+                  <div className="card stat-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                    <button className="btn btn-ghost btn-sm" style={{ width: '100%' }} onClick={() => setIsEditing(true)}>📝 Editar Perfil</button>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-dim)' }}>Dirección: {artistProfile.direccion}</div>
+                  </div>
                 </div>
+
                 <div className="card">
-                  <div className="card-title">📩 Propuestas Pendientes</div>
-                  {userContracts.map((c, i) => (
-                    <div key={i} style={{ background: 'var(--surface-2)', padding: '1rem', borderRadius: '8px', marginTop: '1rem', border: c.status === 'Rejected' ? '1px solid var(--error)' : 'none' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong>{c.show_name}</strong>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <a 
-                            href={`${SNOWTRACE_BASE}${CONTRACT_ADDRESS}`} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            title="Ver en Snowtrace"
-                            style={{ textDecoration: 'none', fontSize: '1rem' }}
-                          >
-                            ❄️
-                          </a>
-                          <span className={`badge ${c.status === 'Rejected' ? 'badge-cancelled' : 'badge-funded'}`}>
-                            {c.status === 'Funded' ? 'Pendiente de Firma' : 
-                             c.status === 'Rejected' ? 'Rechazado' : 
-                             c.status === 'Released' ? 'Liquidado' : c.status}
-                          </span>
+                  <div className="card-title">📜 Seguimiento de Propuestas y Liquidaciones</div>
+                  <div className="card-subtitle">Control de contratos y firmas digitales en Avalanche.</div>
+                  
+                  <table className="deal-table" style={{ marginTop: '1.5rem' }}>
+                    <thead>
+                      <tr>
+                        <th>Evento / Show</th>
+                        <th>Monto Neto</th>
+                        <th>Estado</th>
+                        <th>Acción / Feedback</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userContracts.map((c, i) => (
+                        <tr key={i} style={{ borderLeft: c.status === 'Funded' ? '4px solid var(--primary)' : 'none' }}>
+                          <td><strong>{c.show_name}</strong></td>
+                          <td style={{ fontWeight: 600, color: 'var(--success)' }}>{(c.amount * 0.952).toFixed(6)} AVAX</td>
+                          <td>
+                             <span className={`badge ${
+                               c.status === 'Rejected' ? 'badge-cancelled' : 
+                               c.status === 'Funded' ? 'badge-funded' : 
+                               c.status === 'Signed' ? 'badge-released' :
+                               c.status === 'Confirmed' ? 'badge-confirmed' : 'badge-released'
+                             }`}>
+                               {c.status === 'Funded' ? 'Pendiente Firma' : 
+                                c.status === 'Signed' ? 'Firmado' :
+                                c.status === 'Confirmed' ? 'Esperando Pago' : 
+                                c.status === 'Rejected' ? 'Rechazado' : 'Liquidado'}
+                             </span>
+                          </td>
+                          <td>
+                            {c.status === 'Funded' && (
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button className="btn btn-sm btn-primary" onClick={() => { setSelectedContractForSign(c); setShowFullContract(true); }}>Firmar Contrato</button>
+                                <button className="btn btn-sm btn-ghost" onClick={() => setRejectingContractId(c.id)}>Rechazar</button>
+                              </div>
+                            )}
+                            {c.status === 'Signed' && (
+                              <button className="btn btn-sm btn-primary" style={{ background: 'var(--success)' }} onClick={() => handleConfirmPerformance(c.id)}>
+                                Confirmar Actuación
+                              </button>
+                            )}
+                            {c.status === 'Rejected' && (
+                              <span style={{ fontSize: '0.8rem', fontStyle: 'italic', color: 'var(--text-mid)' }}>
+                                {c.rejection_reason}
+                              </span>
+                            )}
+                            {c.status !== 'Rejected' && (
+                               <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                 <a 
+                                   href={`${SNOWTRACE_BASE}${CONTRACT_ADDRESS}`} 
+                                   target="_blank" 
+                                   rel="noreferrer"
+                                   className="btn btn-sm btn-ghost"
+                                   style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                                   title="Ver en Avalanche Explorer"
+                                 >
+                                   🔗 <span style={{ fontSize: '0.6rem' }}>Explorer</span>
+                                 </a>
+                                 <button 
+                                   className="btn btn-sm btn-ghost" 
+                                   style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }} 
+                                   onClick={() => handleDownloadPDF(c)}
+                                   title="Descargar Contrato PDF"
+                                 >
+                                   📥 <span style={{ fontSize: '0.6rem' }}>PDF</span>
+                                 </button>
+                               </div>
+                            )}
+                            {c.status === 'Released' && (
+                              <button className="btn btn-sm btn-primary" style={{ background: 'var(--warning)', marginTop: '0.25rem', width: '100%', fontSize: '0.7rem' }} onClick={() => handleRequestFiat(c.id)}>
+                                🏦 Liquidar a CBU/CVU
+                              </button>
+                            )}
+                            {c.status === 'FiatPending' && (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--warning)', display: 'block', marginTop: '0.25rem' }}>
+                                ⏳ Procesando transferencia...
+                              </span>
+                            )}
+                            {c.status === 'FiatSettled' && (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 'bold', display: 'block', marginTop: '0.25rem' }}>
+                                ✅ Depositado en Banco
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {userContracts.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-dim)' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</div>
+                      <h3>Sin contratos registrados</h3>
+                      <p>Las propuestas enviadas por las productoras aparecerán aquí.</p>
+                    </div>
+                  )}
+
+                  {/* Modals for Action (Rejecting) */}
+                  {rejectingContractId && (
+                    <div className="animate-in" style={{ marginTop: '1.5rem', padding: '1.5rem', background: 'var(--surface-2)', borderRadius: '12px', border: '1px solid var(--error-dim)' }}>
+                      <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.5rem', color: 'var(--primary)', fontWeight: 700 }}>Motivo del rechazo:</label>
+                      <textarea 
+                        className="input" 
+                        style={{ width: '100%', minHeight: '100px', marginBottom: '1rem', background: 'var(--surface)', color: 'white', border: '1px solid var(--border)' }}
+                        value={rejectionReason}
+                        onChange={e => setRejectionReason(e.target.value)}
+                        placeholder="Explica por qué rechazas esta propuesta (monto, fecha, etc)..."
+                      />
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="btn btn-sm btn-primary" style={{ background: 'var(--error)' }} onClick={handleRejectContract}>Confirmar Rechazo</button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => setRejectingContractId(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modal Legal */}
+                  {showFullContract && selectedContractForSign && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', backdropFilter: 'blur(10px)' }}>
+                      <div className="animate-in" style={{ maxWidth: '800px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div className="contract-paper">
+                          <div className="contract-watermark">
+                            {selectedContractForSign.status === 'Signed' || selectedContractForSign.status === 'Released' ? 'FIRMADO' : 'BORRADOR'}
+                          </div>
+                          
+                          <div className="contract-header">
+                            <div className="contract-title">Instrumento Legal de Contratación</div>
+                            <div style={{ fontSize: '0.7rem', marginTop: '0.5rem', color: '#666' }}>Expediente Digital: {selectedContractForSign.ipfs_hash?.toUpperCase()}</div>
+                          </div>
+
+                          <div className="contract-body">
+                            {(CONTRACT_TEMPLATES.find(t => t.id === selectedContractForSign.template_id) || CONTRACT_TEMPLATES[0]).text
+                              .replace(/{{name}}/g, artistProfile?.name || '...')
+                              .replace(/{{dni}}/g, artistProfile?.dni || '...')
+                              .replace(/{{cuit}}/g, artistProfile?.cuit || '...')
+                              .replace(/{{direccion}}/g, artistProfile?.direccion || '...')
+                              .replace(/{{amount}}/g, selectedContractForSign.amount.toString())
+                              .replace(/{{show_name}}/g, selectedContractForSign.show_name || 'Evento')
+                              .replace(/{{show_date}}/g, selectedContractForSign.fecha_show ? new Date(selectedContractForSign.fecha_show).toLocaleDateString() : '...')
+                              .replace(/{{location}}/g, 'Salta, Argentina')
+                            }
+                          </div>
+
+                          <div className="signature-section">
+                            <div className="signature-box">
+                              <div className="signature-seal">Firmado Digitalmente via Avalanche</div>
+                              Por LA PRODUCTORA
+                            </div>
+                            <div className="signature-box">
+                              {selectedContractForSign.status === 'Signed' && <div className="signature-seal">ID: {shortAddr(account || '')}</div>}
+                              Por EL ARTISTA
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                          {selectedContractForSign.status === 'Funded' && (
+                            <button className="btn btn-primary btn-lg" onClick={() => handleSignContract(selectedContractForSign.id)}>ACEPTO Y FIRMO DIGITALMENTE</button>
+                          )}
+                          <button className="btn btn-ghost btn-lg" onClick={() => { setShowFullContract(false); setSelectedContractForSign(null); }}>Cerrar Vista</button>
                         </div>
                       </div>
-                      <div style={{ color: 'var(--success)' }}>{(c.amount * 0.952).toFixed(10)} AVAX</div>
-                      
-                      {c.status === 'Funded' && (
-                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                          <button className="btn btn-sm btn-primary" onClick={() => setShowFullContract(true)}>Leer y Firmar</button>
-                          <button className="btn btn-sm btn-ghost" onClick={() => setRejectingContractId(c.id)}>Rechazar</button>
-                        </div>
-                      )}
-
-                      {c.status === 'Rejected' && (
-                        <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--text-dim)' }}>
-                          <strong>Tu motivo:</strong> {c.rejection_reason}
-                        </div>
-                      )}
-
-                      {rejectingContractId === c.id && (
-                        <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                          <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>Motivo del rechazo:</label>
-                          <textarea 
-                            className="input" 
-                            style={{ width: '100%', minHeight: '80px', marginBottom: '1rem', background: 'var(--surface-2)', color: 'white' }}
-                            value={rejectionReason}
-                            onChange={e => setRejectionReason(e.target.value)}
-                            placeholder="Ej: El monto es incorrecto o la fecha no está disponible..."
-                          />
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button className="btn btn-sm btn-primary" style={{ background: 'var(--error)' }} onClick={handleRejectContract}>Confirmar Rechazo</button>
-                            <button className="btn btn-sm btn-ghost" onClick={() => setRejectingContractId(null)}>Cancelar</button>
-                          </div>
-                        </div>
-                      )}
-
-                      {showFullContract && (
-                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-                          <div className="card" style={{ maxWidth: '600px', width: '100%', background: 'var(--surface)' }}>
-                            <div className="card-title">Documento Legal</div>
-                            <div style={{ whiteSpace: 'pre-line', fontSize: '0.85rem', margin: '1.5rem 0', maxHeight: '50vh', overflowY: 'auto' }}>{generatedText}</div>
-                            <button className="btn btn-primary btn-lg" onClick={() => { setShowFullContract(false); setTxStatus("✅ Firmado."); }}>ACEPTO Y FIRMO</button>
-                            <button className="btn btn-sm btn-ghost" style={{ marginTop: '0.5rem', width: '100%' }} onClick={() => setShowFullContract(false)}>Cerrar</button>
-                          </div>
-                        </div>
-                      )}
                     </div>
-                  ))}
-                  {userContracts.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>No tenés propuestas pendientes.</p>}
+                  )}
                 </div>
               </div>
             )}
@@ -641,15 +1225,6 @@ export default function App() {
         {/* ── CONTROL ── */}
         {activeTab === 'control' && (
           <div className="animate-in">
-            {!account ? (
-              <div className="card" style={{ textAlign: 'center', padding: '4rem' }}>
-                <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>🔐</div>
-                <div className="card-title" style={{ fontSize: '1.5rem' }}>Identidad Digital Requerida</div>
-                <div className="card-subtitle">Para acceder al panel de control, debes conectar tu firma digital.</div>
-                <button className="btn btn-primary btn-lg" style={{ maxWidth: '300px', margin: '0 auto' }} onClick={connectWallet}>Conectar Wallet</button>
-              </div>
-            ) : (
-              <>
                 <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
                   <div className="card stat-card">
                     <div className="stat-label">Contratos Fiscalizados</div>
@@ -714,26 +1289,26 @@ export default function App() {
                             <td style={{ color: 'var(--success)', fontWeight: 600 }}>{(c.amount * 0.952).toFixed(6)}</td>
                             <td>
                               <span className={`badge ${c.status === 'Rejected' ? 'badge-cancelled' : 'badge-released'}`}>
-                                {c.status === 'Funded' ? 'Pendiente de Firma' : 
-                                 c.status === 'Rejected' ? 'Rechazado' : 
-                                 c.status === 'Released' ? 'Liquidado' : c.status}
+                                 {c.status === 'Funded' ? 'Pendiente de Firma' : 
+                                  c.status === 'Rejected' ? 'Rechazado' : 
+                                  c.status === 'Released' ? 'Firmado / En Garantía' : c.status}
                               </span>
                             </td>
-                            <td>
-                              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button className="btn btn-sm btn-ghost" onClick={() => setTxStatus(`🔍 Auditando contrato ${c.id}...`)}>Fiscalizar</button>
-                                <a 
-                                  href={`${SNOWTRACE_BASE}${CONTRACT_ADDRESS}`} 
-                                  target="_blank" 
-                                  rel="noreferrer"
-                                  className="btn btn-sm btn-ghost"
-                                  style={{ padding: '0.4rem' }}
-                                  title="Ver en Avalanche"
-                                >
-                                  🔗
-                                </a>
-                              </div>
-                            </td>
+                             <td>
+                               <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                 <button className="btn btn-sm btn-ghost" disabled>👁️ Vista Auditoría</button>
+                                 <a 
+                                   href={`${SNOWTRACE_BASE}${CONTRACT_ADDRESS}`} 
+                                   target="_blank" 
+                                   rel="noreferrer"
+                                   className="btn btn-sm btn-ghost"
+                                   style={{ padding: '0.4rem' }}
+                                   title="Ver en Avalanche Explorer"
+                                 >
+                                   🔗
+                                 </a>
+                               </div>
+                             </td>
                           </tr>
                         ))}
                       </tbody>
@@ -747,13 +1322,99 @@ export default function App() {
                       <p>Los contratos aparecerán aquí una vez que sean emitidos por las productoras.</p>
                     </div>
                   )}
+
+                  {/* ELIMINADO MODAL DE AUDITORÍA */}
                 </div>
-              </>
+              </div>
             )}
-          </div>
+
+        {/* ── BANCO / ENTIDAD FINANCIERA ── */}
+        {activeTab === 'banco' && (
+          <div className="animate-in">
+                <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+                  <div className="card stat-card">
+                    <div className="stat-label">Solicitudes Pendientes</div>
+                    <div className="stat-value">{allContracts.filter(c => c.status === 'FiatPending').length}</div>
+                    <div className="stat-change">Off-Ramp Requerido</div>
+                  </div>
+                  <div className="card stat-card">
+                    <div className="stat-label">Liquidaciones Procesadas</div>
+                    <div className="stat-value" style={{ color: 'var(--success)' }}>
+                      {allContracts.filter(c => c.status === 'FiatSettled').length}
+                    </div>
+                    <div className="stat-change">Completadas a Fiat</div>
+                  </div>
+                  <div className="card stat-card">
+                    <div className="stat-label">Compliance Fiscal</div>
+                    <div className="stat-value" style={{ color: 'var(--primary)' }}>ARCA OK</div>
+                    <div className="stat-change">Impuestos Retenidos</div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-title">🏦 Panel de Liquidación Bancaria (Off-Ramp)</div>
+                  <div className="card-subtitle">Conversión de fondos on-chain a cuenta bancaria del artista.</div>
+                  
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="deal-table">
+                      <thead>
+                        <tr>
+                          <th>Fecha Solicitud</th>
+                          <th>Artista / Beneficiario</th>
+                          <th>Monto a Liquidar</th>
+                          <th>Estado Blockchain</th>
+                          <th>Cumplimiento</th>
+                          <th>Acción / Transferencia</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allContracts.filter(c => c.status === 'FiatPending' || c.status === 'FiatSettled').map((c, i) => (
+                          <tr key={i} style={{ borderLeft: c.status === 'FiatPending' ? '4px solid var(--warning)' : '4px solid var(--success)' }}>
+                            <td style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{new Date(c.created_at).toLocaleDateString()}</td>
+                            <td>
+                              <strong>{shortAddr(c.artist_wallet)}</strong>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>CUIT: Verificado</div>
+                            </td>
+                            <td style={{ fontWeight: 600 }}>{(c.amount * 0.952).toFixed(6)} AVAX</td>
+                            <td>
+                              <span className={`badge ${c.status === 'FiatPending' ? 'badge-funded' : 'badge-released'}`}>
+                                 {c.status === 'FiatPending' ? 'Esperando Transferencia' : 'Liquidado a CBU'}
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Retenciones ARCA (4.8%) Ejecutadas en Escrow</span>
+                            </td>
+                             <td>
+                               {c.status === 'FiatPending' ? (
+                                 <button 
+                                   className="btn btn-sm btn-primary" 
+                                   onClick={() => handleSettleFiat(c.id)}
+                                 >
+                                   Aprobar y Transferir Fiat
+                                 </button>
+                               ) : (
+                                 <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 'bold' }}>✅ Comprobante Emitido</span>
+                               )}
+                             </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {allContracts.filter(c => c.status === 'FiatPending' || c.status === 'FiatSettled').length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-dim)' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏦</div>
+                      <h3>Sin solicitudes de liquidación</h3>
+                      <p>Los artistas pueden solicitar su dinero fiat una vez que sus contratos estén ejecutados en blockchain.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </main>
-
     </div>
   )
 }

@@ -60,6 +60,59 @@ body::after {
   z-index: 0;
 }
 
+/* ── Hero & Landing ── */
+.hero-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  text-align: center;
+  padding: 1rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.hero-graphic {
+  width: 100%;
+  max-width: 500px;
+  height: 220px;
+  background-size: cover;
+  background-position: center;
+  border-radius: 20px;
+  margin-bottom: 2rem;
+  box-shadow: 0 15px 40px rgba(0,0,0,0.5), 0 0 15px var(--primary-dim);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-graphic::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent, rgba(8, 10, 15, 0.4));
+}
+
+.hero-title {
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: -1.5px;
+  margin-bottom: 1rem;
+  line-height: 1.1;
+  background: linear-gradient(to right, #fff, #9CA3AF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-subtitle {
+  font-size: 1.1rem;
+  color: var(--text-mid);
+  max-width: 550px;
+  margin-bottom: 2rem;
+  line-height: 1.5;
+}
+
 /* ── Layout ── */
 .app {
   display: grid;
@@ -67,6 +120,10 @@ body::after {
   min-height: 100vh;
   position: relative;
   z-index: 1;
+}
+
+.app-no-sidebar {
+  display: block;
 }
 
 /* ── Sidebar ── */
@@ -177,11 +234,14 @@ body::after {
 
 /* ── Main Content ── */
 .main {
-  padding: 2.5rem 3rem;
+  padding: 2rem;
   display: flex;
   flex-direction: column;
   gap: 2rem;
   overflow-y: auto;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
 /* ── Top Bar ── */
@@ -224,13 +284,14 @@ body::after {
 .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
 
 .btn-sm { padding: 0.4rem 0.875rem; font-size: 0.8rem; }
-.btn-lg { padding: 0.875rem 1.75rem; font-size: 1rem; width: 100%; justify-content: center; }
+.btn-lg { padding: 1rem 2rem; font-size: 1.1rem; }
+.btn-block { width: 100%; justify-content: center; }
 
 /* ── Stats Grid ── */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
 }
 
 /* ── Cards ── */
@@ -566,3 +627,88 @@ input::placeholder { color: var(--text-dim); }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Legal Contract Styles ── */
+.contract-paper {
+  background: #fdfdfd;
+  color: #1a1a1a;
+  padding: 3rem 2.5rem;
+  border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  font-family: 'Georgia', 'Times New Roman', serif;
+  line-height: 1.6;
+  text-align: justify;
+  position: relative;
+  overflow: hidden;
+  min-height: 100%;
+  border: 1px solid #ddd;
+}
+
+.contract-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #333;
+  padding-bottom: 1rem;
+}
+
+.contract-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.contract-body {
+  font-size: 0.95rem;
+  white-space: pre-line;
+}
+
+.contract-clause {
+  margin-top: 1.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.contract-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  font-size: 5rem;
+  font-weight: 900;
+  color: rgba(0, 0, 0, 0.05);
+  pointer-events: none;
+  white-space: nowrap;
+  text-transform: uppercase;
+  z-index: 10;
+}
+
+.contract-watermark.signed {
+  color: rgba(0, 192, 118, 0.1);
+}
+
+.signature-section {
+  margin-top: 3rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+}
+
+.signature-box {
+  border-top: 1px solid #333;
+  padding-top: 0.75rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #555;
+}
+
+.signature-seal {
+  font-family: 'Courier New', monospace;
+  font-size: 0.65rem;
+  color: #00C076;
+  margin-bottom: 0.5rem;
+  border: 1px dashed #00C076;
+  padding: 0.25rem;
+  display: inline-block;
+}
+
