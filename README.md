@@ -1,7 +1,7 @@
-# SContract Artistas Salta 🚀
+# Eventum 🚀
 ### Ecosistema de Liquidación Automatizada para Festivales de Música
 
-SContract es una solución B2B basada en la red **Avalanche** diseñada para profesionalizar la industria de festivales en Salta, Argentina. Permite a productoras, artistas y entes gubernamentales trabajar con acuerdos comerciales inmutables, pagos garantizados mediante Escrow y splits fiscales automáticos.
+Eventum es una solución B2B basada en la red **Avalanche** diseñada para profesionalizar la industria de festivales. Permite a productoras, artistas y entes gubernamentales trabajar con acuerdos comerciales inmutables, pagos garantizados mediante Escrow y splits fiscales automáticos.
 
 ---
 

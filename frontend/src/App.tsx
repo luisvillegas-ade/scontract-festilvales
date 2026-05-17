@@ -27,7 +27,7 @@ De la suma mencionada se aplicarán las siguientes retenciones obligatorias seg�
 Total de retenciones: 4.8%. El monto neto resultante será liquidado a favor de EL ARTISTA.
 
 CLÁUSULA CUARTA: MODALIDAD DE PAGO
-El pago se gestionará mediante un Contrato Inteligente (Smart Contract) en la red Avalanche Fuji (Protocolo Salta Fiscal). Los fondos quedarán en custodia (escrow) y serán liberados una vez confirmada la efectiva prestación del servicio.
+El pago se gestionará mediante un Contrato Inteligente (Smart Contract) en la red Avalanche Fuji (Protocolo Eventum). Los fondos quedarán en custodia (escrow) y serán liberados una vez confirmada la efectiva prestación del servicio.
 
 CLÁUSULA QUINTA: OBLIGACIONES
 EL ARTISTA se compromete a cumplir con el rider técnico acordado y presentarse con la debida antelación.
@@ -51,6 +51,7 @@ El pago se realiza mediante tecnología blockchain Avalanche para garantizar tra
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null)
+  const [contractOwner, setContractOwner] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'productora' | 'artista' | 'control' | 'banco' | null>(null)
   const [loading, setLoading] = useState(false)
   const [txStatus, setTxStatus] = useState<string | null>(null)
@@ -129,6 +130,7 @@ export default function App() {
   useEffect(() => { 
     fetchArtists() 
     fetchEspectaculos()
+    fetchContractOwner()
   }, [])
   useEffect(() => { 
     if (account) {
@@ -217,6 +219,18 @@ export default function App() {
     if (!error && data) setEspectaculos(data)
   }
 
+  const fetchContractOwner = async () => {
+    try {
+      const provider = new ethers.JsonRpcProvider("https://api.avax-test.network/ext/bc/C/rpc")
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, ESCROW_ABI, provider)
+      const owner = await contract.owner()
+      setContractOwner(owner.toLowerCase())
+      console.log("🏛️ Owner del contrato detectado:", owner)
+    } catch (e) {
+      console.error("Error al obtener owner del contrato:", e)
+    }
+  }
+
   const handleCreateShow = async () => {
     if (!account) return alert("Conecta tu wallet primero")
     if (!newShow.nombre || !newShow.presupuesto) return alert("Completa los datos obligatorios")
@@ -286,8 +300,8 @@ export default function App() {
   }
 
   const filteredEspectaculos = espectaculos.filter(s => {
-    // PRIVACY: Only show spectacles belonging to the connected account
-    const isOwner = s.empresa_wallet?.toLowerCase() === account?.toLowerCase();
+    // PRIVACY: Only show spectacles belonging to the connected account OR the administrator
+    const isOwner = s.empresa_wallet?.toLowerCase() === account?.toLowerCase() || account?.toLowerCase() === contractOwner;
     
     return isOwner &&
            (filters.anio === '' || s.anio.toString() === filters.anio) &&
@@ -596,8 +610,8 @@ export default function App() {
       {activeTab && (
         <aside className="sidebar">
           <div className="logo" onClick={() => setActiveTab(null)} style={{ cursor: 'pointer' }}>
-            <div className="logo-icon">🏛️</div>
-            <div><div className="logo-text">Salta Fiscal</div><div className="logo-sub">B2B Dashboard</div></div>
+            <img src="/logo.png" alt="Eventum" style={{ width: '36px', height: '36px', borderRadius: '10px' }} />
+            <div><div className="logo-text">Eventum</div><div className="logo-sub">B2B Dashboard</div></div>
           </div>
           <nav className="nav">
             {activeTab === 'productora' && <button className="nav-item active">🏢 Gestión de Shows</button>}
@@ -644,7 +658,7 @@ export default function App() {
         {!account ? (
           <div className="hero-section animate-in" style={{ position: 'relative', zIndex: 100 }}>
             <div className="hero-graphic" style={{ backgroundImage: 'url(/hero.png)' }}></div>
-            <h1 className="hero-title">SContract Artistas Salta</h1>
+            <h1 className="hero-title">Eventum</h1>
             <p className="hero-subtitle">
               Infraestructura digital para la gestión de espectáculos, contratos inteligentes y recaudación fiscal automatizada sobre la red Avalanche.
             </p>
@@ -748,7 +762,7 @@ export default function App() {
                         </thead>
                         <tbody>
                           {allContracts
-                            .filter(c => c.municipality_wallet?.toLowerCase() === account?.toLowerCase())
+                            .filter(c => c.municipality_wallet?.toLowerCase() === account?.toLowerCase() || account?.toLowerCase() === contractOwner)
                             .map((c, i) => (
                               <tr key={i}>
                                 <td><strong>{c.show_name}</strong></td>
